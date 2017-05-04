@@ -1,4 +1,4 @@
-Data-Analysis
+Data Analysis, Data Mining and Machine Learning
 =============
 
-Some Data Analysis Instances
+Some Data Analysis, Data Mining, and Machine Learning Small Instances
