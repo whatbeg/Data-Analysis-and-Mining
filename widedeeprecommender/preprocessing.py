@@ -59,8 +59,6 @@ def get_data(train_file_name='train.data', test_file_name='test.data'):
     df_test[LABEL_COLUMN] = (
         df_test["income_bracket"].apply(lambda x: ">50K" in x)).astype(int)
 
-    # print(df_train)
-    # print(df_test)
     return df_train, df_test
 
 
@@ -100,18 +98,19 @@ def bucketized_column(column, boundaries):
     return _column
 
 
-def discretize_for_lookupTable(df, data_type, lookup_dict, columns):
+def discretize_for_lookupTable(df, data_type, lookup_dict, columns, start=0):
     """
     discretize for BigDL's lookupTable's requirement: elements of input should be little than or equal to $nIndex + 1
 
     :param df: data tensor. Type must be numpy.ndarray
     :param columns: columns to do discretize
+    :param start: index that starts from
     :return: discretized data tensor
     """
     if data_type == 'train':
         for col in columns:
             total = sorted({}.fromkeys(df[:, col]).keys())
-            total_dict = {k: i+1
+            total_dict = {k: i+start
                           for i, k in enumerate(total)}
             for _ in range(len(df[:, col])):
                 if df[_, col] not in total_dict.keys():
@@ -132,7 +131,7 @@ def discretize_for_lookupTable(df, data_type, lookup_dict, columns):
     return df, lookup_dict
 
 
-def cross_column(columns, hash_backet_size=1e4):
+def cross_column(columns, hash_backet_size=1e4, scale=0.0):
     """
     generate cross column feature from `columns` with hash bucket.
 
@@ -145,6 +144,8 @@ def cross_column(columns, hash_backet_size=1e4):
     for i in range(columns.shape[0]):
         _crossed_column[i, 0] = (hash("_".join(map(str, columns[i, :]))) % hash_backet_size
                                  + hash_backet_size) % hash_backet_size
+        if scale > 0.0:
+            _crossed_column[i, 0] *= scale
     return _crossed_column
 
 
@@ -156,7 +157,7 @@ def feature_columns(df, data_type, lookup_dict):
     assert WORKCLASS == 1 and EDUCATION == 3 and CAPITAL_LOSS == 11 and NATIVE_COUNTRY == 13
     education_occupation = cross_column(df[:, [EDUCATION, OCCPATION]], hash_backet_size=int(1e4))
     nativecountry_occupation = cross_column(df[:, [NATIVE_COUNTRY, OCCPATION]], hash_backet_size=int(1e4))
-    agebucket_education_occpation = cross_column(df[:, [AGE_BUCKETS, EDUCATION, OCCPATION]], hash_backet_size=(1e6))
+    agebucket_education_occpation = cross_column(df[:, [AGE_BUCKETS, EDUCATION, OCCPATION]], hash_backet_size=int(1e6))
     for i in range(df.shape[0]):
         df[i, WORKCLASS] = (hash(df[i, 1]) % 100 + 100) % 100       # workclass
         df[i, EDUCATION] = (hash(df[i, 3]) % 1000 + 1000) % 1000    # education
@@ -170,7 +171,8 @@ def feature_columns(df, data_type, lookup_dict):
         df[i, CAPITAL_GAIN] = df[i, 10]    # capital_gain
         df[i, CAPITAL_LOSS] = df[i, 11]    # capital_loss
         df[i, HOURS_PER_WEEK] = df[i, 12]  # hours_per_week
-    df, lookup_dict = discretize_for_lookupTable(df, data_type, lookup_dict, columns=[WORKCLASS, EDUCATION, RELATIONSHIP, OCCPATION, NATIVE_COUNTRY, GENDER])
+    df, lookup_dict = discretize_for_lookupTable(df, data_type, lookup_dict,
+                      columns=[WORKCLASS, EDUCATION, RELATIONSHIP, OCCPATION, NATIVE_COUNTRY, GENDER], start=1)
     df = np.c_[df, education_occupation, nativecountry_occupation, agebucket_education_occpation]
     return df, lookup_dict
 

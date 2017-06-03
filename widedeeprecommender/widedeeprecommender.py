@@ -46,16 +46,8 @@ def build_models(model_type='wide_n_deep', classNum=2):
 
     model = Sequential()
     wide_model = Concat(2)
-    wide_model.add(Sequential().add(Select(2, 1)).add(Reshape([1])))
-    wide_model.add(Sequential().add(Select(2, 2)).add(Reshape([1])))
-    wide_model.add(Sequential().add(Select(2, 3)).add(Reshape([1])))
-    wide_model.add(Sequential().add(Select(2, 4)).add(Reshape([1])))
-    wide_model.add(Sequential().add(Select(2, 5)).add(Reshape([1])))
-    wide_model.add(Sequential().add(Select(2, 6)).add(Reshape([1])))
-    wide_model.add(Sequential().add(Select(2, 7)).add(Reshape([1])))
-    wide_model.add(Sequential().add(Select(2, 8)).add(Reshape([1])))
-    wide_model.add(Sequential().add(Select(2, 9)).add(Reshape([1])))
-    wide_model.add(Sequential().add(Select(2, 10)).add(Reshape([1])))
+    for i in range(1, 8):
+        wide_model.add(Sequential().add(Select(2, i)).add(Reshape([1])))
     deep_model = Sequential()
     deep_column = Concat(2)
     deep_column.add(Sequential().add(Select(2, 11)).add(LookupTable(9, 8, 0.0)))
@@ -64,18 +56,15 @@ def build_models(model_type='wide_n_deep', classNum=2):
     deep_column.add(Sequential().add(Select(2, 14)).add(LookupTable(6, 8, 0.0)))
     deep_column.add(Sequential().add(Select(2, 15)).add(LookupTable(42, 8, 0.0)))
     deep_column.add(Sequential().add(Select(2, 16)).add(LookupTable(15, 8, 0.0)))
-    deep_column.add(Sequential().add(Select(2, 17)).add(Reshape([1])))
-    deep_column.add(Sequential().add(Select(2, 18)).add(Reshape([1])))
-    deep_column.add(Sequential().add(Select(2, 19)).add(Reshape([1])))
-    deep_column.add(Sequential().add(Select(2, 20)).add(Reshape([1])))
-    deep_column.add(Sequential().add(Select(2, 21)).add(Reshape([1])))
+    for i in range(17, 22):
+        deep_column.add(Sequential().add(Select(2, i)).add(Reshape([1])))
     deep_model.add(deep_column).add(Linear(53, 100)).add(ReLU()).add(Linear(100, 50)).add(ReLU())
     if model_type == 'wide_n_deep':
         wide_model.add(deep_model)
-        model.add(wide_model).add(Linear(60, classNum)).add(LogSoftMax())
+        model.add(wide_model).add(Linear(57, classNum)).add(LogSoftMax())
         return model
     elif model_type == 'wide':
-        model.add(wide_model).add(Linear(10, classNum)).add(LogSoftMax())
+        model.add(wide_model).add(Linear(7, classNum)).add(LogSoftMax())
         return model
     elif model_type == 'deep':
         model.add(deep_model).add(Linear(50, classNum)).add(LogSoftMax())
@@ -100,7 +89,6 @@ def get_data_rdd(sc, data_type='train'):
     labels = sc.parallelize(labels)
     record = features.zip(labels).map(lambda features_label:
                                       Sample.from_ndarray(features_label[0], features_label[1]+1))
-    # record.collect()
     return record
 
 
@@ -117,8 +105,8 @@ if __name__ == "__main__":
     if options.action == "train":
         train_data = get_data_rdd(sc, 'train')
         test_data = get_data_rdd(sc, 'test')
-        state = {"learningRate": 0.01,
-                 }
+        state = {"learningRate": 0.001,
+                 "learningRateDecay": 0.0005}
         optimizer = Optimizer(
             model=build_models(options.model_type, 2),
             training_rdd=train_data,
@@ -128,15 +116,16 @@ if __name__ == "__main__":
             end_trigger=MaxEpoch(20),
             batch_size=int(options.batchSize))
         optimizer.set_validation(
-            batch_size=32,
+            batch_size=256,
             val_rdd=test_data,
             trigger=EveryEpoch(),
             val_method=["Top1Accuracy", "Loss"]
         )
+
         optimizer.set_checkpoint(EveryEpoch(), "/tmp/{}/".format(options.model_type))
         trained_model = optimizer.optimize()
         parameters = trained_model.parameters()
-        results = trained_model.test(test_data, 32, ["Top1Accuracy"])
+        results = trained_model.test(test_data, 256, ["Top1Accuracy"])
         for result in results:
             print(result)
     elif options.action == "test":
@@ -144,6 +133,6 @@ if __name__ == "__main__":
         test_data = get_data_rdd(sc, 'test')
         # TODO: Pass model path through external parameter
         model = Model.load("/tmp/{}/model.5101".format(options.model_type))
-        results = model.test(test_data, 32, ["Top1Accuracy"])
+        results = model.test(test_data, 256, ["Top1Accuracy"])
         for result in results:
             print(result)
